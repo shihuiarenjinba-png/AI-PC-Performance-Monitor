@@ -7,6 +7,7 @@ from tkinter import messagebox, ttk
 from pathlib import Path
 
 from pc_load import LocalMonitor, delete_history, history_path, save_history
+from dark_theme import BG, BORDER, CARD, SOFT, MUTED, PURPLE, CYAN, TEXT, apply_theme, dark_text, header, metric
 
 STRINGS = {
     "ja": {
@@ -41,56 +42,56 @@ STRINGS = {
 class App:
     def __init__(self, root: tk.Tk):
         self.root = root
-        # Legibility-first desktop sizing; native Windows control styling, no external UI framework.
-        from tkinter import font as tkfont
-        tkfont.nametofont("TkDefaultFont").configure(family="Segoe UI", size=11)
-        style = ttk.Style(root)
-        style.configure(".", font=("Segoe UI", 11))
-        style.configure("TButton", padding=(12, 7))
-        style.configure("TNotebook.Tab", padding=(16, 8))
+        apply_theme(root, accent=PURPLE)
         self.lang = "ja"
         self.monitor = LocalMonitor(Path.home(), interval=2)
         self.pending: queue.Queue[dict] = queue.Queue()
         self.monitor.on_sample = self.pending.put
         self.last = None
-        root.geometry("900x640")
+        root.geometry("980x700")
         root.minsize(760, 540)
         root.protocol("WM_DELETE_WINDOW", self.close)
-        self.bar = ttk.Frame(root, padding=12)
+        self.hero_title, self.hero_subtitle = header(
+            root, "●  LOCAL AI / OBSERVABILITY", "AI WORKLOAD MONITOR",
+            "ローカルAIの実行候補とPC負荷を確認", right="OFFLINE  •  PRIVATE")
+        self.bar = ttk.Frame(root, style="Toolbar.TFrame", padding=(14, 10))
         self.bar.pack(fill="x")
         self.buttons = {}
         for key, action in (("start", self.start), ("stop", self.stop),
                             ("save", self.save), ("delete", self.delete)):
-            button = ttk.Button(self.bar, command=action)
+            button = ttk.Button(self.bar, command=action, style=("Primary.TButton" if key == "start" else "Quiet.TButton" if key == "delete" else "TButton"))
             button.pack(side="left", padx=4)
             self.buttons[key] = button
-        self.buttons["toggle"] = ttk.Button(self.bar, command=self.change_language)
+        self.buttons["toggle"] = ttk.Button(self.bar, command=self.change_language, style="Quiet.TButton")
         self.buttons["toggle"].pack(side="right", padx=4)
 
         self.state = tk.StringVar()
-        ttk.Label(root, textvariable=self.state, padding=(14, 1)).pack(anchor="w")
+        ttk.Label(root, textvariable=self.state, style="Status.TLabel", padding=(19, 4)).pack(anchor="w")
         self.tabs = ttk.Notebook(root)
         self.tabs.pack(fill="both", expand=True, padx=12, pady=8)
-        self.pages = {key: ttk.Frame(self.tabs, padding=14)
+        self.pages = {key: ttk.Frame(self.tabs, style="Panel.TFrame", padding=15)
                       for key in ("overview", "process", "history")}
         for page in self.pages.values():
             self.tabs.add(page)
         self.value_labels = {}
         self.name_labels = {}
-        for key in ("cpu", "ram", "disk", "gpu", "temp", "count"):
-            line = ttk.Frame(self.pages["overview"])
-            line.pack(fill="x", pady=9)
-            name = ttk.Label(line, width=28)
-            name.pack(side="left")
-            value = ttk.Label(line, font=("Segoe UI", 12, "bold"))
-            value.pack(side="left")
+        cards = ttk.Frame(self.pages["overview"], style="Panel.TFrame")
+        cards.pack(fill="both", expand=True)
+        for col in range(3):
+            cards.columnconfigure(col, weight=1, uniform="metrics")
+        for idx, key in enumerate(("cpu", "ram", "gpu", "disk", "temp", "count")):
+            tile, name, value = metric(cards, key, accent=key in {"cpu", "gpu", "count"})
+            tile.grid(row=idx // 3, column=idx % 3, sticky="nsew", padx=5, pady=5)
             self.name_labels[key] = name
             self.value_labels[key] = value
-        self.notice = ttk.Label(self.pages["overview"], wraplength=680, justify="left")
-        self.notice.pack(anchor="w", pady=(24, 0))
+        self.notice = ttk.Label(self.pages["overview"], wraplength=800,
+                                justify="left", style="PanelText.TLabel")
+        self.notice.pack(anchor="w", pady=(12, 0))
         self.candidates = tk.Text(self.pages["process"], wrap="none", state="disabled")
+        dark_text(self.candidates)
         self.candidates.pack(fill="both", expand=True)
-        self.chart = tk.Canvas(self.pages["history"], background="white", highlightthickness=1)
+        self.chart = tk.Canvas(self.pages["history"], background=SOFT,
+                               highlightthickness=1, highlightbackground=BORDER)
         self.chart.pack(fill="both", expand=True)
         self.chart.bind("<Configure>", lambda e: self.draw_chart())
         self.translate()
@@ -101,6 +102,7 @@ class App:
 
     def translate(self):
         self.root.title(self.w("title"))
+        self.hero_subtitle.configure(text=("ローカルAI候補・PC負荷を安全に監視" if self.lang == "ja" else "Local AI candidates and PC workload  /  NO CLOUD"))
         for key, button in self.buttons.items():
             button.configure(text=self.w(key))
         for key, page in self.pages.items():
@@ -150,11 +152,14 @@ class App:
         width = max(self.chart.winfo_width(), 100)
         height = max(self.chart.winfo_height(), 100)
         left, top, right, bottom = 50, 18, width - 20, height - 35
-        self.chart.create_rectangle(left, top, right, bottom, outline="#b0b0b0")
+        self.chart.create_rectangle(left, top, right, bottom, outline=BORDER)
+        for level in (25, 50, 75):
+            y = bottom - (bottom - top) * level / 100
+            self.chart.create_line(left, y, right, y, fill=BORDER, dash=(3, 7))
         history = list(self.monitor.history)[-120:]
         if not history:
             return
-        for field, color in (("cpu_percent", "#1666aa"), ("ram_percent", "#c05f18")):
+        for field, color in (("cpu_percent", CYAN), ("ram_percent", PURPLE)):
             pts = []
             for idx, sample in enumerate(history):
                 val = sample.get(field)
@@ -167,10 +172,10 @@ class App:
             elif len(pts) == 2:
                 self.chart.create_oval(pts[0] - 2, pts[1] - 2, pts[0] + 2, pts[1] + 2,
                                        fill=color)
-        self.chart.create_text(left + 80, height - 15, text="CPU", fill="#1666aa")
-        self.chart.create_text(left + 170, height - 15, text="RAM", fill="#c05f18")
-        self.chart.create_text(left - 20, top, text="100%")
-        self.chart.create_text(left - 20, bottom, text="0%")
+        self.chart.create_text(left + 80, height - 15, text="CPU", fill=CYAN)
+        self.chart.create_text(left + 170, height - 15, text="RAM", fill=PURPLE)
+        self.chart.create_text(left - 20, top, text="100%", fill=MUTED)
+        self.chart.create_text(left - 20, bottom, text="0%", fill=MUTED)
 
     def poll(self):
         changed = False
