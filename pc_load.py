@@ -57,6 +57,9 @@ def sample(path: str | Path) -> dict:
         "ram_used_bytes": int(mem.used), "ram_total_bytes": int(mem.total),
         "disk_percent": float(disk.percent),
         "top_processes": rows[:8],
+        "observed_processes": [{"name": p["name"],
+                                "memory_mib": round((p["memory_bytes"] or 0) / 1048576, 1)}
+                               for p in rows],
         "local_ai_related_process_candidates": detected,
         "local_ai_detection": "PROCESS_NAME_CANDIDATES" if detected else "NOT_OBSERVED",
         "gpu_percent": None, "vram_used_bytes": None, "cpu_temp_c": None,
