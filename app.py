@@ -41,6 +41,13 @@ STRINGS = {
 class App:
     def __init__(self, root: tk.Tk):
         self.root = root
+        # Legibility-first desktop sizing; native Windows control styling, no external UI framework.
+        from tkinter import font as tkfont
+        tkfont.nametofont("TkDefaultFont").configure(family="Segoe UI", size=11)
+        style = ttk.Style(root)
+        style.configure(".", font=("Segoe UI", 11))
+        style.configure("TButton", padding=(12, 7))
+        style.configure("TNotebook.Tab", padding=(16, 8))
         self.lang = "ja"
         self.monitor = LocalMonitor(Path.home(), interval=2)
         self.pending: queue.Queue[dict] = queue.Queue()
