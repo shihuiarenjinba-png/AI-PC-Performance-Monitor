@@ -8,6 +8,7 @@ from pathlib import Path
 
 from pc_load import LocalMonitor, delete_history, history_path, save_history
 from telemetry_plot import draw_telemetry
+from alert_ui import AlertPanel
 from dark_theme import BG, BORDER, CARD, SOFT, MUTED, PURPLE, CYAN, TEXT, apply_theme, dark_text, header, metric
 
 STRINGS = {
@@ -74,6 +75,12 @@ class App:
                       for key in ("overview", "process", "history")}
         for page in self.pages.values():
             self.tabs.add(page)
+        self.alert_text = tk.StringVar(value="")
+        ttk.Label(root, textvariable=self.alert_text, style="Status.TLabel",
+                  padding=(19, 1)).pack(anchor="w", before=self.tabs)
+        self.alert_panel = AlertPanel(root, self.tabs, "AI_PC_Monitor",
+                                      lambda: self.lang, accent=PURPLE,
+                                      on_status=self.alert_text.set)
         self.value_labels = {}
         self.name_labels = {}
         cards = ttk.Frame(self.pages["overview"], style="Panel.TFrame")
@@ -116,6 +123,7 @@ class App:
         for key, name in self.name_labels.items():
             name.configure(text=self.w(key))
         self.notice.configure(text=self.w("hint"))
+        self.alert_panel.refresh_locale()
         self.refresh()
 
     def change_language(self):
@@ -123,11 +131,13 @@ class App:
         self.translate()
 
     def start(self):
+        self.alert_panel.engine.clear_runtime()
         self.monitor.start()
         self.refresh()
 
     def stop(self):
         self.monitor.stop()
+        self.alert_panel.engine.clear_runtime()
         self.refresh()
 
     def refresh(self):
@@ -194,6 +204,8 @@ class App:
         try:
             while True:
                 self.last = self.pending.get_nowait()
+                if self.monitor.worker and self.monitor.worker.is_alive():
+                    self.alert_panel.on_sample(self.last)
                 changed = True
         except queue.Empty:
             pass
