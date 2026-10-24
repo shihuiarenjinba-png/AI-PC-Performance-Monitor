@@ -7,6 +7,7 @@ from tkinter import messagebox, ttk
 from pathlib import Path
 
 from pc_load import LocalMonitor, delete_history, history_path, save_history
+from telemetry_plot import draw_telemetry
 from dark_theme import BG, BORDER, CARD, SOFT, MUTED, PURPLE, CYAN, TEXT, apply_theme, dark_text, header, metric
 
 STRINGS = {
@@ -84,6 +85,11 @@ class App:
             tile.grid(row=idx // 3, column=idx % 3, sticky="nsew", padx=5, pady=5)
             self.name_labels[key] = name
             self.value_labels[key] = value
+        self.live_chart = tk.Canvas(self.pages["overview"], height=155,
+                                    background=SOFT, highlightthickness=1,
+                                    highlightbackground=BORDER)
+        self.live_chart.pack(fill="x", pady=(11, 0))
+        self.live_chart.bind("<Configure>", lambda event: self.draw_live_chart())
         self.notice = ttk.Label(self.pages["overview"], wraplength=800,
                                 justify="left", style="PanelText.TLabel")
         self.notice.pack(anchor="w", pady=(12, 0))
@@ -146,6 +152,12 @@ class App:
         self.candidates.insert("1.0", "\n".join(rows))
         self.candidates.configure(state="disabled")
         self.draw_chart()
+        self.draw_live_chart()
+
+    def draw_live_chart(self):
+        draw_telemetry(self.live_chart, self.monitor.history,
+                       empty_label=("計測開始後に推移を表示します" if self.lang == "ja"
+                                    else "Start monitoring to see the trend"))
 
     def draw_chart(self):
         self.chart.delete("all")
