@@ -87,7 +87,12 @@ def save_history(data: list[dict], *, destination: Path | None = None) -> Path:
     fd, tmp = tempfile.mkstemp(prefix=".pc-load-", suffix=".tmp", dir=target.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump({"schema": 1, "samples": data[-MAX_HISTORY:]}, f,
+            allowed = ("timestamp_utc", "cpu_percent", "ram_percent",
+                       "ram_used_bytes", "ram_total_bytes", "disk_percent",
+                       "gpu_percent", "gpu_status", "cpu_temp_c")
+            safe = [{key: sample.get(key) for key in allowed if key in sample}
+                    for sample in data[-MAX_HISTORY:]]
+            json.dump({"schema": 1, "samples": safe}, f,
                       ensure_ascii=False, indent=2)
             f.flush()
             os.fsync(f.fileno())
@@ -129,7 +134,11 @@ class LocalMonitor:
             while not self.stop_event.is_set():
                 try:
                     result = sample(self.disk)
-                    self.history.append(result)
+                    # Process names/PIDs are needed for current alerts, not history.
+                    # Never retain all process details in the 30-minute buffer.
+                    self.history.append({key: value for key, value in result.items()
+                                         if key not in ("observed_processes", "top_processes",
+                                                        "local_ai_related_process_candidates")})
                     if self.on_sample is not None:
                         self.on_sample(result)
                 except (OSError, ValueError, RuntimeError) as exc:
